@@ -30,13 +30,33 @@
 ]).
 
 -export([
+    add_seconds/2,
+    add_seconds/1,
+    add_minutes/2,
+    add_minutes/1,
+    add_hours/2,
+    add_hours/1,
+    add_days/2,
+    add_days/1,
+    add_weeks/2,
+    add_weeks/1,
+    add_months/2,
+    add_months/1,
+    add_years/2,
+    add_years/1,
+    add_date/2
+]).
+
+-export([
     register_parser/2,
     register_parser/1,
     deregister_parser/1,
     deregister_parsers/0,
+    get_parsers/0,
 
     register_format/2,
     deregister_format/1,
+    get_formats/0,
 
     set_timezone/1,
     set_timezone/2,
@@ -67,7 +87,7 @@
 %%
 -define(DEFAULT_TZ, case application:get_env(qdate, default_timezone) of 
                         undefined -> "GMT";
-                        TZ -> TZ 
+                        {ok, TZ} -> TZ 
                     end).
 
 -define(DETERMINE_TZ, determine_timezone()).
@@ -75,10 +95,10 @@
 -define(else, true).
 
 start() ->
-    application:start(qdate).
+    application:load(qdate).
 
 stop() ->
-    application:stop(qdate).
+    ok.
 
 to_string(Format) ->
     to_string(Format, os:timestamp()).
@@ -324,6 +344,122 @@ compare(A, Op, B) ->
     end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%    Date Math       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+add_seconds(Seconds, Date) ->
+    to_unixtime(Date) + Seconds.
+
+add_seconds(Seconds) ->
+    add_seconds(Seconds, os:timestamp()).
+
+add_minutes(Minutes, Date) ->
+    add_seconds(Minutes * 60, Date).
+
+add_minutes(Minutes) ->
+    add_minutes(Minutes, os:timestamp()).
+
+add_hours(Hours, Date) ->
+    add_seconds(Hours * 3600, Date).
+
+add_hours(Hours) ->
+    add_hours(Hours, os:timestamp()).
+
+add_days(Days, Date0) ->
+    {{Y,M,D},Time} = to_date(Date0),
+    to_unixtime(fix_maybe_improper_date({{Y, M, D+Days}, Time})). 
+
+add_days(Days) ->
+    add_days(Days, os:timestamp()).
+
+add_weeks(Weeks, Date) ->
+    add_days(Weeks * 7, Date).
+
+add_weeks(Weeks) ->
+    add_weeks(Weeks, os:timestamp()).
+
+add_months(Months, Date) ->
+    {{Y,M,D}, Time} = to_date(Date),
+    {TargetYear, TargetMonth} = fix_year_month({Y,M+Months}),
+    DaysInMonth = calendar:last_day_of_the_month(TargetYear, TargetMonth),
+    NewD = lists:min([DaysInMonth, D]),
+    to_unixtime(fix_maybe_improper_date({{Y, M+Months, NewD}, Time})).
+
+add_months(Months) ->
+    add_months(Months, os:timestamp()).
+
+add_years(Years, Date) ->
+    {{Y,M,D}, Time} = to_date(Date),
+    TargetYear = Y+Years,
+    NewD = case M of
+        2 -> 
+            DaysInMonth = calendar:last_day_of_the_month(TargetYear, M),
+            lists:min([DaysInMonth, D]);
+        _ ->
+            D
+    end,
+    to_unixtime({{Y+Years, M, NewD}, Time}).
+
+add_years(Years) ->
+    add_years(Years, os:timestamp()).
+
+add_date({{AddY, AddM, AddD}, {AddH, AddI, AddS}}, Date) ->
+    {{Y, M, D}, {H, I, S}} = to_date(Date),
+    Date1 = fix_maybe_improper_date({{Y+AddY, M+AddM, D+AddD}, {H, I, S}}),
+    Date2 = to_unixtime(Date1),
+    Date2 + AddS + (AddI*60) + (AddH*3600).
+
+
+-define(IS_LEAP_YEAR(Y), (Y rem 4 =:= 0 andalso
+                             (Y rem 100 =/= 0
+                              orelse Y rem 400 =:= 0))).
+
+fix_maybe_improper_date({Date0, Time}) ->
+    Date = fmid(Date0),
+    {Date, Time}.
+
+fix_year_month({Y, M}) when M > 12 ->
+    YearsOver = M div 12,
+    {Y + YearsOver, M-(YearsOver*12)};
+fix_year_month({Y, M}) when M < 1 ->
+    YearsUnder = (abs(M-1) div 12) + 1,
+    {Y - YearsUnder, M+(YearsUnder*12)};
+fix_year_month({Y, M}) ->
+    {Y, M}.
+    
+
+fmid({Y, M, D}) when M > 12;
+                     M < 1 ->
+    {NewY, NewM} = fix_year_month({Y, M}),
+    fmid({NewY, NewM, D});
+
+fmid({Y, M, D}) when (D > 30 andalso (
+                        M=:=4 orelse 
+                        M=:=6 orelse
+                        M=:=9 orelse
+                        M=:=11)) ->
+    fmid({Y, M+1, D-30});
+fmid({Y, M, D}) when M=:=2 andalso D > 29 andalso ?IS_LEAP_YEAR(Y) ->
+    fmid({Y, M+1, D-29});
+fmid({Y, M, D}) when M =:= 2 andalso D > 28 andalso not(?IS_LEAP_YEAR(Y)) ->
+    fmid({Y, M+1, D-28});
+fmid({Y, M, D}) when D > 31 ->
+    fmid({Y, M+1, D-31});
+
+fmid({Y, M, D}) when D < 1 ->
+    TargetMonth = case M-1 of
+        0 -> 12;
+        X -> X
+    end,
+    DaysInTargetMonth = calendar:last_day_of_the_month(Y, TargetMonth),
+    fmid({Y, M-1, D+DaysInTargetMonth});
+
+
+fmid(Date) ->
+    Date.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%   Timezone Stuff   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -458,6 +594,9 @@ clear_timezone(Key) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%  Register Parsers  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+get_parsers() ->
+    qdate_srv:get_parsers().
+
 register_parser(Key, Parser) when is_function(Parser,1) ->
     qdate_srv:register_parser(Key,Parser).
 
@@ -494,6 +633,9 @@ try_parsers(RawDate,[{ParserKey,Parser}|Parsers]) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%  Register Formats  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+get_formats() ->
+    qdate_srv:get_formats().
 
 register_format(Key, Format) ->
     qdate_srv:register_format(Key, Format).
@@ -544,10 +686,10 @@ tz_test_() ->
                 simple_test(SetupData),
                 compare_test(SetupData),
                 tz_tests(SetupData),
-                test_process_die(SetupData),
                 parser_format_test(SetupData),
                 test_deterministic_parser(SetupData),
-                test_disambiguation(SetupData)
+                test_disambiguation(SetupData),
+                arith_tests(SetupData)
             ]}
         end
     }.
@@ -676,39 +818,28 @@ parser_format_test(_) ->
         ?_assertEqual("2/8/2008 12:00am",to_string(longdate,"2008-02-08 12:00am")),
         ?_assertEqual("2/8/2008 12:00am",to_string(longdate,"20080208"))
     ]}.
-
-test_process_die(_) ->
-    TZ = "MST",
-    Caller = self(),
-    Pid = spawn(fun() -> 
-                        set_timezone(TZ),
-                        Caller ! tz_set,
-                        receive tz_set_ack -> ok end,
-                        Caller ! get_timezone()
-                end),
-
-    PidTZFromOtherProc = receive 
-                            tz_set ->
-                                T = get_timezone(Pid),
-                                Pid ! tz_set_ack,
-                                T
-                            after 1000 -> fail 
-                         end,
-    ReceivedTZ = receive 
-                    TZ -> TZ 
-                 after 2000 ->
-                    fail 
-                 end,
-
-    [
-        %% Verify we can read the spawned process's TZ from another proc
-        ?_assertEqual(TZ,PidTZFromOtherProc),
-        %% Verify the spawned process properly set the TZ
-        ?_assertEqual(TZ,ReceivedTZ),
-        %% Verify the now-dead spawned process's TZ is cleared
-        ?_assertEqual(undefined,get_timezone(Pid))
-    ].
     
+arith_tests(_) ->
+    {inorder,[
+        ?_assertEqual({{2012,2,29},{23,59,59}}, to_date(add_seconds(-1, {{2012,3,1},{0,0,0}}))),
+        ?_assertEqual({{2013,2,28},{23,59,59}}, to_date(add_seconds(-1, {{2013,3,1},{0,0,0}}))),
+        ?_assertEqual({{2015,1,1},{0,0,0}}, to_date(add_years(1, {{2014,1,1},{0,0,0}}))),
+        ?_assertEqual({{2015,1,1},{0,0,0}}, to_date(add_seconds(1, {{2014,12,31},{23,59,59}}))),
+        ?_assertEqual({{2015,1,1},{0,0,59}}, to_date(add_minutes(1, {{2014,12,31},{23,59,59}}))),
+        ?_assertEqual({{2015,1,1},{0,59,59}}, to_date(add_hours(1, {{2014,12,31},{23,59,59}}))),
+        ?_assertEqual({{2015,1,1},{23,59,59}}, to_date(add_days(1, {{2014,12,31},{23,59,59}}))),
+        ?_assertEqual({{2015,1,7},{23,59,59}}, to_date(add_weeks(1, {{2014,12,31},{23,59,59}}))),
+        ?_assertEqual({{2015,1,31},{23,59,59}}, to_date(add_months(1, {{2014,12,31},{23,59,59}}))),
+        ?_assertEqual({{2015,2,28},{0,0,0}}, to_date(add_months(2, {{2014,12,31},{0,0,0}}))),
+        ?_assertEqual({{2016,2,28},{0,0,0}}, to_date(add_years(1, {{2015,2,28},{0,0,0}}))),
+        ?_assertEqual({{2014,2,28},{0,0,0}}, to_date(add_months(-24, {{2016,2,29},{0,0,0}}))),
+        ?_assertEqual({{2012,2,29},{0,0,0}}, to_date(add_months(-48, {{2016,2,29},{0,0,0}}))),
+        ?_assertEqual({{2016,2,29},{0,0,0}}, to_date(add_months(-1, {{2016,3,31},{0,0,0}}))),
+        ?_assertEqual({{2017,2,28},{0,0,0}}, to_date(add_years(1, {{2016,2,29},{0,0,0}}))),
+        ?_assertEqual({{2015,3,1},{0,0,0}}, to_date(add_days(1, {{2015,2,28},{0,0,0}}))),
+        ?_assertEqual({{2015,3,3},{0,0,0}}, to_date(add_days(3, {{2015,2,28},{0,0,0}})))
+    ]}.
+
         
 start_test() ->
     application:start(qdate),

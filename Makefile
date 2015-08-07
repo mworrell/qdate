@@ -1,13 +1,18 @@
-all: get-deps compile
+REBAR = $(shell pwd)/rebar3
 
-get-deps:
-	./rebar get-deps
+all: compile
 
 compile:
-	./rebar compile
+	$(REBAR) compile
 
-test: get-deps compile
-	./rebar skip_deps=true eunit
+test: compile
+	$(REBAR) eunit
 
 run:
-	erl -pa ebin/ deps/*/ebin/ -eval "application:start(qdate)"
+	$(REBAR) shell
+
+publish:
+	$(REBAR) as pkg upgrade
+	$(REBAR) as pkg hex publish
+	$(REBAR) upgrade
+

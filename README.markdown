@@ -1,4 +1,4 @@
-# qdate - A Wrapper for Erlang Date and Timezone Management
+# qdate - Erlang Date and Timezone Library
 
 [![Build Status](https://travis-ci.org/choptastic/qdate.png?branch=master)](https://travis-ci.org/choptastic/qdate)
 
@@ -21,12 +21,15 @@ benefits of `ec_date` and `erlang_localtime`, as well as extending the
 capabilities of both to provide for other needed tools found in a single
 module.
 
-`qdate` will provide, under the roof of a single module date and time formatting
-and parsing from and into:
+`qdate` provides date and time formatting and parsing from and into:
  + Formatting Strings
  + Erlang Date Format
  + Erlang Now Format
  + Unixtime integers
+ + Timezones
+
+And all this while dealing with timezone parsing, formatting, conversion
+and overall management.
 
 #### Acceptable Date Formats
 
@@ -240,6 +243,7 @@ be attempted before engaging the `ec_date` parser.
     able to parse the string, then it should return `undefined`.
   + `deregister_parser(Key)` - If you previously registered a parser with the
     `qdate` server, you can deregister it by its `Key`.
+  + `get_parsers()` - Get the list of all registered parsers and their keys.
 
 ### Registering and Deregistering Formatters
   + `register_format(Key, FormatString)` - Register a formatting string with
@@ -247,6 +251,7 @@ be attempted before engaging the `ec_date` parser.
     formatting string.
   + `deregister_format(Key)` - Deregister the formatting string from the
     `qdate` server.
+  + `get_formats()` - Get the list of all registered formats and their keys.
 
 ### About backwards compatibility with `ec_date` and deterministic parsing
 
@@ -614,6 +619,41 @@ ok
 %% that timezone to our intended timezone.
 ```
 
+## Date Arithmetic
+
+(not fully tested yet, but will have full tests for 0.4.0)
+
+The current implementation of qdate's date arithmetic returns Unixtimes.
+
+There are 8 main functions for date arithmetic:
+
+	+ `add_seconds(Seconds, Date)`
+	+ `add_minutes(Minutes, Date)`
+	+ `add_hours(Hours, Date)`
+	+ `add_days(Days, Date)`
+	+ `add_weeks(Weeks, Date)`
+	+ `add_months(Months, Date)`
+	+ `add_years(Years, Date)`
+	+ `add_date(DateToAdd, Date)` - `DateToAdd` is a shortcut way of adding
+	  numerous options. For example. `qdate:add_date({{1, 2, -3}, {-500, 20, 0}})`
+	  will add 1 year, add 2 months, subtract 3 days, subtract 500 hours, add 20
+	  minutes, and not make any changes to seconds.
+
+For the date arithmetic functions, `Date`, like all `qdate` functions, can be any
+format.
+
+### Date Arithmetic from "now"
+
+There are 7 other arithmetic functions that take a single argument, and these do arithmetic from "now." For example, `add_years(4)` is a shortcut for `add_years(4, os:timestamp())`.
+
+   + `add_seconds(Seconds)`
+   + `add_minutes(Minutes)`
+   + `add_hours(Hours)`
+   + `add_days(Days)`
+   + `add_weeks(Weeks)`
+   + `add_months(Months)`
+   + `add_years(Years)`
+
 ## Thanks
 
 A few shoutouts to [Dale Harvey](http://github.com/daleharvey) and the
@@ -627,6 +667,8 @@ not exist.
 + [Mark Allen](https://github.com/mrallen1)
 + [Christopher Phillips](https://github.com/lostcolony)
 + [Nicholas Lundgaard](https://github.com/nlundgaard-al)
++ [Alejandro Ramallo](https://github.com/aramallo)
++ [Heinz Gies](https://github.com/Licenser)
 
 
 ## Changelog
@@ -638,7 +680,7 @@ See [CHANGELOG.markdown](https://github.com/choptastic/qdate/blob/master/CHANGEL
 + Make `qdate` backend-agnostic (allow specifying either ec_date or dh_date as
   the backend)
 + Add `-spec` and `-type` info for dialyzer
-+ Add date and time arithmetic.
++ Provide a sample qdate.config for users to see
 + Research the viability of [ezic](https://github.com/drfloob/ezic) for a
   timezone backend replacement for `erlang_localtime`.
 
