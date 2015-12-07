@@ -74,6 +74,8 @@
     parse/1
 ]).
 
+-include_lib("erlang_localtime/include/tz_index.hrl").
+
 %% This the value in gregorian seconds for jan 1st 1970, 12am
 %% It's used to convert to and from unixtime, since unixtime starts 
 %% 1970-01-01 12:00am
@@ -478,7 +480,7 @@ extract_timezone(Unixtime) when is_integer(Unixtime) ->
 extract_timezone(DateString) when is_list(DateString) ->
     case extract_gmt_relative_timezone(DateString) of
         undefined -> 
-            AllTimezones = localtime:list_timezones(),
+            AllTimezones = list_timezones(),
             RevDate = lists:reverse(DateString),
             extract_timezone_helper(RevDate, AllTimezones);
         {Date, GMTRel} ->
@@ -490,6 +492,9 @@ extract_timezone(Now={_,_,_}) ->
     {Now, "GMT"};
 extract_timezone({MiscDate,TZ}) ->
     {MiscDate,TZ}.
+
+list_timezones() ->
+    dict:fetch_keys(?tz_index).
     
 extract_gmt_relative_timezone(DateString) ->
     RE = "^(.*?)(?:GMT|UTC)?([+-])(\\d{1,2}):?(\\d{2})?$",
